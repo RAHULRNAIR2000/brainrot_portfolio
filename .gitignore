@@ -1,0 +1,12 @@
+node_modules
+dist
+*.local
+.shots
+tsconfig.tsbuildinfo
+
+# local only: raw source assets (277 MB), tools and drafting notes
+assets-src
+.claude
+STORIES.md
+PLAN.md
+ASSET_BRIEF.md
