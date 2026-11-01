@@ -20,7 +20,8 @@ export default {
         display: ['"Fraunces Variable"', 'Georgia', 'serif'],
         sans: ['"Inter Variable"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-        neon: ['Pacifico', 'cursive'], // loader title only
+        neon: ['Pacifico', 'cursive'],
+        hand: ['Caveat', 'cursive'], // Mehmet's note on the shutter
       },
     },
   },

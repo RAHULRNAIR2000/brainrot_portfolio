@@ -6,7 +6,7 @@ import { useGame } from '../store/gameStore'
 // What's actually downloading, in street terms.
 function labelFor(item: string, chunk: boolean) {
   if (!chunk) return 'Building the street'
-  if (item.includes('/models/vendor')) return `Waking up ${vendorName}`
+  if (item.includes('/models/vendor')) return `Waking up ${vendorName.split(' ')[0]}`
   if (item.includes('/models/cat')) return 'Finding Pamuk the cat'
   if (item.includes('/hdri/')) return 'Switching on the night sky'
   if (item.includes('/textures/')) return 'Laying the cobblestones'
@@ -30,52 +30,98 @@ function useLoadProgress(ready: boolean) {
     id = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(id)
   }, [])
-  const done = ready && p > 0.995
-  return { p, label: done ? 'Ice cream is ready' : labelFor(load?.item ?? '', !!load) }
+  return { p, label: labelFor(load?.item ?? '', !!load) }
 }
 
-// Dome on top, scalloped skirt underneath; (x, y) is the middle of the skirt line.
-function scoopPath(x: number, y: number) {
-  const bumps = Array.from({ length: 6 }, () => 'q-4.33 6 -8.67 0').join(' ')
-  return `M${x - 26} ${y} C${x - 26} ${y - 16} ${x - 15} ${y - 24} ${x} ${y - 24} C${x + 15} ${y - 24} ${x + 26} ${y - 16} ${x + 26} ${y} ${bumps} Z`
-}
+// Shop front height: room for the HUD row, then the sign. The shutter hangs below it.
+const FRONT = 'calc(var(--safe-top) + 150px)'
+const HOUSING = 20
 
-// A tall Maraş cone: one scoop per story, stacked as the street loads.
-function ScoopStack({ p }: { p: number }) {
-  const n = flavors.length
-  const step = 17
-  const coneY = 30 + (n - 1) * step + 2
+// Painted metal slats over the real shutter texture the street uses.
+const SLATS = {
+  backgroundImage:
+    'linear-gradient(90deg, rgba(0,0,0,0.28), transparent 7%, transparent 93%, rgba(0,0,0,0.28)), repeating-linear-gradient(#a9b6b0 0 3px, #8f9d98 3px 13px, #6c7975 13px 15px, #3b4543 15px 17px), url(/textures/painted_metal_shutter/diff.jpg)',
+  backgroundSize: '100% 100%, 100% 17px, 260px',
+  backgroundBlendMode: 'normal, multiply, normal',
+} as const
+
+function Shutter({ p, label, gone }: { p: number; label: string; gone: boolean }) {
+  const pct = Math.round(p * 100)
+  const left = 1 - p
   return (
-    <svg viewBox={`0 0 100 ${coneY + 80}`} className="h-[min(30vh,230px)] w-auto overflow-visible" aria-hidden>
-      <defs>
-        <linearGradient id="scoop-shade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.32" />
-          <stop offset="0.45" stopColor="#fff" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.22" />
-        </linearGradient>
-        <pattern id="waffle" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <path d="M0 0H9M0 0V9" stroke="#9c6428" strokeWidth="1.4" opacity="0.65" />
-        </pattern>
-      </defs>
-      {/* cone */}
-      <path d={`M25 ${coneY} L50 ${coneY + 76} L75 ${coneY} Z`} fill="#dba159" stroke="#8a5a24" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d={`M25 ${coneY} L50 ${coneY + 76} L75 ${coneY} Z`} fill="url(#waffle)" />
-      {/* scoops, bottom first so each skirt drapes over the scoop below */}
-      {flavors.map((f, i) => {
-        const shown = p >= (i + 1) / n - 0.001
-        const y = coneY + 2 - i * step
-        const x = 50 + (i % 2 ? 2 : -2)
-        const d = scoopPath(x, y)
-        return (
-          <g key={f.id} className={shown ? 'scoop-drop' : ''} style={{ opacity: shown ? 1 : 0, transformOrigin: `${x}px ${y}px` }}>
-            <path d={scoopPath(x, y + 2.5)} fill="rgba(0,0,0,0.22)" />
-            <path d={d} fill={f.color} />
-            <path d={d} fill="url(#scoop-shade)" stroke="rgba(30,27,46,0.3)" strokeWidth="1" strokeLinejoin="round" />
-            <ellipse cx={x - 10} cy={y - 15} rx="6.5" ry="3.2" fill="#fff" opacity="0.45" transform={`rotate(-22 ${x - 10} ${y - 15})`} />
-          </g>
-        )
-      })}
-    </svg>
+    <>
+      {/* warm light from the shop leaking under the shutter */}
+      <div
+        className="pointer-events-none absolute inset-x-0 h-24 transition-opacity duration-700"
+        style={{
+          top: `calc(${FRONT} + ${HOUSING}px + (100% - ${FRONT} - ${HOUSING}px) * ${left})`,
+          background: 'radial-gradient(55% 100% at 50% 0, rgba(255,170,80,0.45), rgba(255,120,40,0.12) 45%, transparent 75%)',
+          opacity: gone || p > 0.97 ? 0 : 1,
+        }}
+        aria-hidden
+      />
+      <div
+        className="absolute inset-x-0 overflow-hidden shadow-[0_12px_20px_-8px_rgba(0,0,0,0.85)]"
+        style={{ ...SLATS, top: `calc(${FRONT} + ${HOUSING}px)`, height: `calc((100% - ${FRONT} - ${HOUSING}px) * ${left})` }}
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Loading the street"
+      >
+        {/* Mehmet's note, taped near the bottom so it rides up with the shutter */}
+        <div
+          className="absolute left-1/2 w-[184px] -translate-x-1/2 -rotate-3 bg-[#f6efdc] px-3 pb-2.5 pt-3 text-center text-[#2a1d18] shadow-[0_8px_14px_-6px_rgba(0,0,0,0.85)] transition-opacity duration-300"
+          style={{ bottom: 'clamp(70px, 24%, 230px)', opacity: p > 0.9 ? 0 : 1 }}
+        >
+          <span className="absolute -left-3 -top-2 h-[18px] w-12 -rotate-[24deg] bg-[#e8dcb3]/80" aria-hidden />
+          <span className="absolute -right-3 -top-2 h-[18px] w-12 rotate-[22deg] bg-[#e8dcb3]/80" aria-hidden />
+          <p className="font-hand text-[24px] font-semibold leading-[1.02]">Back in 5 min!</p>
+          <p key={label} className="rise mt-1 font-hand text-[20px] font-semibold leading-[1.05] text-[#5a3a2c]">
+            {label}…
+          </p>
+          <p className="mt-1.5 font-mono text-[10.5px] tabular-nums tracking-[0.08em] text-[#6a5d55]">— {vendorName.split(' ')[0]} · {pct}%</p>
+        </div>
+        {/* bottom bar and handle */}
+        <div className="absolute inset-x-0 bottom-0 h-3 border-t border-[#c3cdc8] bg-gradient-to-b from-[#5b6461] to-[#2c3331]" aria-hidden />
+        <div className="absolute bottom-3.5 left-1/2 h-2.5 w-12 -translate-x-1/2 rounded-md border-2 border-[#9aa6a2] bg-[#2b3130]" aria-hidden />
+      </div>
+    </>
+  )
+}
+
+function ShopFront({ gone }: { gone: boolean }) {
+  return (
+    <div
+      className="absolute inset-x-0 top-0 transition-transform duration-[900ms] ease-[cubic-bezier(.6,0,.3,1)]"
+      style={{ height: `calc(${FRONT} + ${HOUSING}px)`, transform: gone ? 'translateY(-110%)' : 'none' }}
+    >
+      {/* plaster wall */}
+      <div
+        className="absolute inset-x-0 top-0 border-b-[3px] border-[#1b1512]"
+        style={{ height: FRONT, backgroundColor: '#3a2f2a', backgroundImage: 'var(--grain), linear-gradient(#4b3c34, #2d2420)', backgroundSize: '180px 180px, 100% 100%' }}
+      />
+      {/* enamel sign with two bulbs */}
+      <div className="absolute inset-x-4 mx-auto max-w-[440px]" style={{ top: 'calc(var(--safe-top) + 60px)' }}>
+        {[14, -14].map((x) => (
+          <span
+            key={x}
+            className="absolute -top-3 h-2 w-2 rounded-full bg-[#ffd27a] shadow-[0_0_10px_3px_rgba(255,179,71,0.55)]"
+            style={x > 0 ? { left: x } : { right: -x }}
+            aria-hidden
+          />
+        ))}
+        <div className="flex h-[74px] flex-col items-center justify-center rounded-md border-[3px] border-brass bg-[#18463a] shadow-[0_8px_16px_-6px_rgba(0,0,0,0.9),inset_0_0_0_2px_#0e2c24]">
+          <h1 className="display-hed text-[27px] font-black leading-none tracking-[0.01em] text-[#f1d58a] [text-shadow:0_1px_0_#6b4d17]">Rahul R Nair</h1>
+          <p className="display-soft mt-1 text-[12.5px] italic text-[#e9dcc0]">Maraş Dondurması · backend engineer</p>
+        </div>
+      </div>
+      {/* shutter housing */}
+      <div
+        className="absolute inset-x-0 border-b-2 border-[#232a2a] bg-gradient-to-b from-[#626e6c] to-[#3d4746] shadow-[0_4px_8px_-2px_rgba(0,0,0,0.6)]"
+        style={{ top: FRONT, height: HOUSING }}
+      />
+    </div>
   )
 }
 
@@ -85,90 +131,61 @@ export function Loader({ ready }: { ready: boolean }) {
   const { p, label } = useLoadProgress(ready)
   const [gone, setGone] = useState(false)
 
-  // open the gate once the bar has visibly reached the end
+  // open the gate once the shutter has visibly reached the top
   useEffect(() => {
     if (!ready || p < 0.999) return
-    const t = window.setTimeout(() => useGame.getState().phase === 'loading' && setPhase('gate'), 450)
+    const t = window.setTimeout(() => useGame.getState().phase === 'loading' && setPhase('gate'), 350)
     return () => clearTimeout(t)
   }, [ready, p, setPhase])
 
   const leaving = phase !== 'loading' && phase !== 'gate'
   useEffect(() => {
     if (!leaving) return
-    const t = window.setTimeout(() => setGone(true), 900)
+    const t = window.setTimeout(() => setGone(true), 1000)
     return () => clearTimeout(t)
   }, [leaving])
   if (gone) return null
 
+  const gate = phase === 'gate'
   const enter = () => {
     audio.unlock()
     audio.setMuted(useGame.getState().muted)
     setPhase('intro')
   }
-  const pct = Math.round(p * 100)
 
   return (
-    <div
-      className={`app-h fixed inset-0 z-30 flex flex-col items-center justify-center overflow-hidden px-6 pb-4 pt-[calc(var(--safe-top)+60px)] text-center transition-opacity duration-[900ms] ${
-        leaving ? 'pointer-events-none opacity-0' : 'opacity-100'
-      }`}
-      style={{ background: 'radial-gradient(ellipse at 50% 30%, rgba(40,30,60,0.94), rgba(5,7,15,0.985) 72%)' }}
-    >
-      {/* warm stall glow behind the cone */}
-      <div
-        className="pointer-events-none absolute left-1/2 top-[52%] h-[70vmin] w-[70vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
-        style={{ background: 'radial-gradient(circle, rgba(255,150,70,0.35), rgba(255,61,172,0.12) 45%, transparent 70%)' }}
-        aria-hidden
-      />
+    <div className={`app-h fixed inset-0 z-30 overflow-hidden ${gate ? 'cursor-pointer' : ''} ${leaving ? 'pointer-events-none' : ''}`} onClick={gate ? enter : undefined}>
+      <Shutter p={p} label={label} gone={leaving} />
+      <ShopFront gone={leaving} />
 
-      <p className="relative font-mono text-[10.5px] uppercase tracking-[0.32em] text-brass/90">Maraş dondurma · est. tonight</p>
-      <h1 className="sign-on neon-pink relative mt-2 font-neon text-[clamp(3rem,14vw,6.5rem)] leading-none">Dondurma</h1>
-      <p className="display-soft relative mt-3 text-[16px] italic leading-snug text-paper/80 sm:text-[19px]">
-        {flavors.length} project stories, one stubborn ice cream man.
-        <br className="sm:hidden" /> The work of Rahul R Nair.
-      </p>
-
-      <div className="relative mt-[clamp(10px,3vh,28px)] flex flex-col items-center">
-        <ScoopStack p={p} />
-      </div>
-
-      <div className="relative mt-[clamp(10px,2.5vh,22px)] flex h-[104px] w-full max-w-[300px] flex-col items-center justify-start">
-        {phase === 'gate' ? (
-          <>
+      {gate && (
+        <div
+          className={`paper absolute inset-x-3 mx-auto max-w-[440px] cursor-default rounded-xl p-4 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.9)] transition-all duration-500 sm:p-5 ${
+            leaving ? 'translate-y-6 opacity-0' : 'rise'
+          }`}
+          style={{ bottom: 'calc(var(--safe-bottom) + 14px)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="display-hed text-[19px] font-bold leading-snug text-ink sm:text-[21px]">I build backends. He trolls people with ice cream.</p>
+          <p className="mt-1 text-[13.5px] leading-snug text-ink-soft">
+            {flavors.length} project stories inside. Catch the cone to read one. Sound on if you can.
+          </p>
+          <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
             <button
               onClick={enter}
-              className="rise pulse paper display-soft min-h-[54px] rounded-lg border border-ink/20 px-9 py-3 text-[19px] font-semibold text-ink transition hover:-translate-y-0.5 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-paper"
+              className="min-h-[46px] rounded-lg bg-ink px-5 text-[15px] font-semibold text-paper transition hover:-translate-y-0.5 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt"
             >
-              Step up to the cart
+              Step up to the cart →
             </button>
             <button
               onClick={() => useGame.getState().setSkip(true)}
-              className="rise mt-2 min-h-[36px] font-mono text-[11px] uppercase tracking-[0.18em] text-paper/60 underline decoration-paper/30 underline-offset-4 hover:text-paper"
-              style={{ animationDelay: '120ms' }}
+              className="min-h-[44px] text-[13.5px] font-medium text-cobalt underline decoration-1 underline-offset-4 hover:decoration-2"
             >
               or just read the work
             </button>
-          </>
-        ) : (
-          <>
-            <div className="flex w-full items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.16em]">
-              <span key={label} className="rise truncate text-paper/75">
-                {label}
-                <span className="loading-dots" />
-              </span>
-              <span className="ml-3 tabular-nums text-paper/55">{pct}%</span>
-            </div>
-            <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-paper/10">
-              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #c9993f, #ffcf7a)', boxShadow: '0 0 10px rgba(255,190,90,0.6)' }} />
-            </div>
-          </>
-        )}
-      </div>
-
-      <p className="relative mt-3 max-w-sm text-[13.5px] leading-relaxed text-paper/60">
-        Turkish ice cream sellers are famous for trolling customers with the cone. Catch it and he hands over a story.
-      </p>
-      <p className="relative mt-3 font-mono text-[10.5px] uppercase tracking-[0.22em] text-paper/45">sound on · headphones are nice</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
